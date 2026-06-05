@@ -75,7 +75,7 @@ const GALLERY_PANELS = [
  * CHIP_SCALE — the uniform scale multiplier applied to the chip on load.
  * Exported so NfcScrollyTelling can use the same value.
  */
-export const CHIP_SCALE = 2.5;
+export const CHIP_SCALE = 1.25;
 
 /**
  * HorizontalGallery — Client Component
@@ -143,9 +143,6 @@ export default function HorizontalGallery({
             end: getEndValue,            // Same end
             scrub: 2,                    // Same scrub weight
             invalidateOnRefresh: true,
-            onUpdate: () => {
-              splineApp.requestRender();
-            },
           },
         })
           // Slow elegant tumble on Y axis — 1.5 full rotations across entire gallery

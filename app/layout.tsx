@@ -30,14 +30,17 @@ export const metadata: Metadata = {
   },
 };
 
+import CustomScrollIndicator from "@/components/layout/CustomScrollIndicator";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("h-full antialiased dark", inter.variable)}>
-      <body className="min-h-full flex flex-col bg-black text-white">
+    <html lang="en" className={cn("h-full antialiased dark", inter.variable)} suppressHydrationWarning>
+      <body className="min-h-full flex flex-col bg-black text-white" suppressHydrationWarning>
+        <CustomScrollIndicator />
         {children}
       </body>
     </html>
