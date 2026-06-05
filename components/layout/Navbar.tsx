@@ -58,7 +58,7 @@ export default function Navbar() {
       ref={navRef}
       id="main-navbar"
       className="fixed top-6 left-1/2 -translate-x-1/2 z-50
-                 flex items-center gap-8 px-8 py-3
+                 flex items-center gap-4 md:gap-8 px-5 md:px-8 py-2 md:py-3
                  backdrop-blur-md bg-black/40 border border-white/10
                  rounded-full shadow-2xl shadow-black/30
                  opacity-0"
@@ -66,17 +66,17 @@ export default function Navbar() {
       {/* Logo */}
       <a
         href="#"
-        className="text-white font-light text-lg tracking-[0.15em] uppercase
+        className="text-white font-light text-base md:text-lg tracking-[0.1em] md:tracking-[0.15em] uppercase
                    transition-opacity duration-300 hover:opacity-70"
       >
         Voloo
       </a>
 
       {/* Divider */}
-      <div className="w-px h-5 bg-white/15" />
+      <div className="w-px h-5 bg-white/15 hidden md:block" />
 
       {/* Links */}
-      <ul className="flex items-center gap-6">
+      <ul className="hidden md:flex items-center gap-6">
         {NAV_LINKS.map((link) => (
           <li key={link.href}>
             <a
@@ -93,7 +93,7 @@ export default function Navbar() {
       {/* CTA */}
       <a
         href="#contact"
-        className="ml-2 px-5 py-1.5 text-sm font-light
+        className="md:ml-2 px-4 md:px-5 py-1.5 text-xs md:text-sm font-light
                    bg-white/10 border border-white/15 rounded-full
                    text-white/80 transition-all duration-300
                    hover:bg-white/20 hover:text-white hover:border-white/25"

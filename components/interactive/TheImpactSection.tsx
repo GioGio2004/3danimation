@@ -12,34 +12,19 @@ interface TheImpactSectionProps {
   chipRef: SPEObject | null;
 }
 
-const TESTIMONIALS = [
-  {
-    quote: "“The perfect integration of physical craft and digital magic.”",
-    author: "The Griffin Hotel",
-  },
-  {
-    quote: "“Beautifully minimal. Our guests are absolutely obsessed.”",
-    author: "Cafe L'Olivier",
-  },
-  {
-    quote: "“The absolute gold standard for modern hospitality venues.”",
-    author: "Atelier Noir",
-  },
-];
-
 type VariantKey = "Standard" | "Pro" | "Elite";
 
 interface VariantDetail {
-  price: string;
+  title: string;
   description: string;
   features: string[];
 }
 
 const VARIANT_DETAILS: Record<VariantKey, VariantDetail> = {
   Standard: {
-    price: "$49",
+    title: "NTAG STANDARD",
     description:
-      "Sleek matte finish. Essential NFC capabilities optimized for quick interactions and seamless guest logins.",
+      "The original. Refined until it feels inevitable. Lifts just enough, grips just right, and quietly disappears into your day like it was never there.",
     features: [
       "Matte Polymer Body",
       "Standard Range NFC",
@@ -47,9 +32,9 @@ const VARIANT_DETAILS: Record<VariantKey, VariantDetail> = {
     ],
   },
   Pro: {
-    price: "$79",
+    title: "NTAG PRO",
     description:
-      "Brushed aluminum bezel. Enhanced range and multi-app support for venues seeking premium performance.",
+      "Engineered for performance. Brushed aluminum bezel with enhanced range and multi-app support for venues seeking a premium edge.",
     features: [
       "Brushed Aluminum Bezel",
       "High-Range Antenna",
@@ -58,9 +43,9 @@ const VARIANT_DETAILS: Record<VariantKey, VariantDetail> = {
     ],
   },
   Elite: {
-    price: "$149",
+    title: "NTAG ELITE",
     description:
-      "Hand-polished obsidian steel. Custom laser engraving and dedicated priority concierge support.",
+      "The pinnacle of our craft. Hand-polished obsidian steel, custom laser engraving, and dedicated priority concierge support.",
     features: [
       "Obsidian Steel Frame",
       "Max-Range Coil",
@@ -76,231 +61,262 @@ export default function TheImpactSection({
   chipRef,
 }: TheImpactSectionProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const stickyRef = useRef<HTMLDivElement>(null);
-  const testimonialsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const uiContainerRef = useRef<HTMLDivElement>(null);
+  const topUIRef = useRef<HTMLDivElement>(null);
+  const bottomUIRef = useRef<HTMLDivElement>(null);
 
   const [activeVariant, setActiveVariant] = useState<VariantKey>("Standard");
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+
+    // STRICT GUARD: Do not run any GSAP code until the DOM, Spline, and the Chip exist.
+    if (!wrapper || !splineApp || !chipRef) {
+      console.log(
+        "⏳ [TheImpactSection] Waiting for Spline before building ScrollTrigger...",
+      );
+
+      // Fallback: if spline never loads, still reveal the UI so it's not invisible forever.
+      // We use a short timeout as a graceful fallback — the GSAP animation is prettier but
+      // this ensures content is never permanently hidden.
+      const fallbackTimer = setTimeout(() => {
+        if (topUIRef.current) gsap.set(topUIRef.current, { opacity: 1, y: 0 });
+        if (bottomUIRef.current)
+          gsap.set(bottomUIRef.current, { opacity: 1, y: 0 });
+      }, 2000);
+
+      return () => clearTimeout(fallbackTimer);
+    }
+
+    console.log(
+      "✅ [TheImpactSection] Spline ready — building scroll timeline.",
+    );
+
+    // Capture chip's current state from whatever OryzoEditorialGallery left it in.
+    // Do NOT use hardcoded 0 values — animate relative to current state to avoid snaps.
+    const startPosX = chipRef.position.x;
+    const startPosY = chipRef.position.y;
+    const startPosZ = chipRef.position.z;
+    const startRotX = chipRef.rotation.x;
+    const startRotY = chipRef.rotation.y;
+    const startRotZ = chipRef.rotation.z;
+    const startScaleX = chipRef.scale.x;
+    const startScaleY = chipRef.scale.y;
+    const startScaleZ = chipRef.scale.z;
 
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
+      const sharedScrollTrigger: ScrollTrigger.Vars = {
+        trigger: wrapper,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 4,
+        invalidateOnRefresh: true,
+        // Call requestRender on EVERY update so the 3D canvas stays live
+        onUpdate: () => splineApp.requestRender(),
+      };
+
+      // ── DOM UI timeline (text / buttons) ─────────────────────────────────────
+      // Note: shared onUpdate above drives the render; this is a separate timeline
+      // for the UI elements only so they animate smoothly.
+      const uiTl = gsap.timeline({
+        scrollTrigger: { ...sharedScrollTrigger },
+      });
+
+      if (topUIRef.current && bottomUIRef.current) {
+        uiTl
+          .fromTo(
+            topUIRef.current,
+            { opacity: 0, y: -30 },
+            { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" },
+            0.4,
+          )
+          .fromTo(
+            bottomUIRef.current,
+            { opacity: 0, y: 30 },
+            { opacity: 1, y: 0, duration: 0.3, ease: "power3.out" },
+            0.5,
+          );
+      }
+
+      // ── 3D Chip timeline ──────────────────────────────────────────────────────
+      // Single unified tween with keyframes — ONE authoritative interpolation path.
+      // Two separate tweens on the same property caused GSAP to fight itself,
+      // making the chip appear to spin more than intended.
+      const chipTl = gsap.timeline({
         scrollTrigger: {
           trigger: wrapper,
           start: "top top",
           end: "bottom bottom",
-          scrub: 1,
+          scrub: 4,
+          invalidateOnRefresh: true,
+          onUpdate: () => splineApp.requestRender(),
         },
       });
 
-      // 1. Phase 1: Testimonials void scrolling (0% to 60%)
-      TESTIMONIALS.forEach((_, index) => {
-        const el = testimonialsRef.current[index];
-        if (!el) return;
+      // ── Rotation — slow quarter-turn with a gentle tilt ─────────────────────
+      chipTl.to(
+        chipRef.rotation,
+        {
+          y: startRotY + Math.PI * 0.001, // 90° Y spin
+          x: startRotX + Math.PI * 0.08, // ~15° forward tilt — adds depth
+          z: startRotZ + Math.PI * 0.03, // ~5° lean — subtle premium feel
+          ease: "sine.inOut",
+          duration: 1,
+          immediateRender: false,
+        },
+        0,
+      );
 
-        const startOffset = index * 0.18;
+      // ── Position — single smooth arc to centre ───────────────────────────────
+      chipTl.to(
+        chipRef.position,
+        {
+          keyframes: [
+            { x: 0, y: startPosY, z: startPosZ, ease: "sine.inOut" }, // 0%
+            {
+              x: 0,
+              y: startPosY * 0.4,
+              z: startPosZ * 0.4,
+              ease: "sine.inOut",
+            }, // 50%
+            { x: 0, y: 0, z: 0, ease: "sine.inOut" }, // 100%
+          ],
+          duration: 1,
+          immediateRender: false,
+        },
+        0,
+      );
 
-        tl.fromTo(
-          el,
-          {
-            y: "30vh",
-            opacity: 0,
-            color: "#6b7280",
-          },
-          {
-            y: "0vh",
-            opacity: 1,
-            color: "#ffffff",
-            duration: 0.12,
-            ease: "power2.out",
-          },
-          startOffset,
-        ).to(
-          el,
-          {
-            y: "-30vh",
-            opacity: 0,
-            color: "#6b7280",
-            duration: 0.12,
-            ease: "power2.in",
-          },
-          startOffset + 0.12,
-        );
-      });
+      // ── Scale — one gentle breath, no pops ──────────────────────────────────
+      chipTl.to(
+        chipRef.scale,
+        {
+          keyframes: [
+            {
+              x: startScaleX,
+              y: startScaleY,
+              z: startScaleZ,
+              ease: "sine.inOut",
+            },
+            {
+              x: startScaleX * 1.05,
+              y: startScaleY * 1.05,
+              z: startScaleZ * 1.05,
+              ease: "sine.inOut",
+            },
+            {
+              x: startScaleX,
+              y: startScaleY,
+              z: startScaleZ,
+              ease: "sine.inOut",
+            },
+          ],
+          duration: 1,
+          immediateRender: false,
+        },
+        0,
+      );
+    }, wrapper);
 
-      // 2. Phase 2: Steady, Professional Float & Settle (0% to 75%)
-      if (chipRef && splineApp) {
-        const startY = chipRef.position.y;
-        const startZ = chipRef.position.z;
-        const startRotX = chipRef.rotation.x;
-        const startRotY = chipRef.rotation.y;
-
-        // 2a. Slow, elegant float (0% - 60%)
-        tl.to(
-          chipRef.position,
-          {
-            y: startY - 15, // Very gentle drift instead of massive drop
-            z: startZ - 10,
-            duration: 0.6,
-            ease: "none",
-            immediateRender: false,
-          },
-          0,
-        ).to(
-          chipRef.rotation,
-          {
-            x: startRotX + Math.PI * 0.1, // Subtle, slow tilt
-            y: startRotY + Math.PI, // One calm rotation instead of multiple spins
-            duration: 0.6,
-            ease: "none",
-            immediateRender: false,
-          },
-          0,
-        );
-
-        // 2b. Smooth Settle (60% - 75%): Ease cleanly to a face-on resting position
-        tl.to(
-          chipRef.position,
-          {
-            y: 0, // Lock to exact center
-            z: 0, // Lock to exact center
-            duration: 0.15,
-            ease: "power2.inOut", // Smooth transition, no hard bouncing
-            immediateRender: false,
-          },
-          0.6,
-        ).to(
-          chipRef.rotation,
-          {
-            x: 0, // Perfectly flat
-            y: startRotY + Math.PI * 2, // Finish the elegant spin to face the user
-            z: 0, // Perfectly flat
-            duration: 0.15,
-            ease: "power2.inOut", // Smooth ease
-            immediateRender: false,
-          },
-          0.6,
-        );
-      }
-
-      // 3. Phase 3: The UI Reveal (80% - 100%)
-      if (headingRef.current && uiContainerRef.current) {
-        tl.fromTo(
-          headingRef.current,
-          {
-            opacity: 0,
-            y: 35,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.15,
-            ease: "power3.out",
-          },
-          0.8,
-        ).fromTo(
-          uiContainerRef.current,
-          {
-            opacity: 0,
-            y: 45,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.15,
-            ease: "power3.out",
-          },
-          0.85,
-        );
-      }
-    });
+    // Do NOT call ScrollTrigger.refresh() here — it invalidates the pinned
+    // OryzoEditorialGallery section above. GSAP's invalidateOnRefresh handles
+    // recalculation when the window resizes.
 
     return () => ctx.revert();
   }, [splineApp, chipRef]);
 
   return (
-    <section ref={wrapperRef} className="relative z-40 h-[400vh] w-full">
-      <div
-        ref={stickyRef}
-        className="sticky top-0 h-screen w-full bg-transparent overflow-hidden flex flex-col justify-between py-12 pointer-events-none"
-      >
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-6">
-          {TESTIMONIALS.map((item, index) => (
-            <div
-              key={`testimonial-${index}`}
-              ref={(el) => {
-                testimonialsRef.current[index] = el;
-              }}
-              className="absolute text-center max-w-2xl opacity-0 select-none flex flex-col items-center justify-center"
-            >
-              <blockquote className="text-2xl md:text-3xl lg:text-4xl font-extralight tracking-tight leading-relaxed italic text-inherit">
-                {item.quote}
-              </blockquote>
-              <cite className="not-italic block mt-4 text-xs md:text-sm uppercase tracking-[0.3em] text-neutral-500 font-light">
-                {item.author}
-              </cite>
-            </div>
-          ))}
-        </div>
-
-        <h2
-          ref={headingRef}
-          id="cta-heading"
-          className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-[0.1em] text-white uppercase text-center mt-6 select-none opacity-0"
-        >
-          Choose Your NTAG
-        </h2>
-
+    <section
+      ref={wrapperRef}
+      // ─── KEY FIX ───────────────────────────────────────────────────────────
+      // bg-transparent (NOT bg-[#0a0a0a]) so the fixed Spline canvas (z-0) shows
+      // through. The original opaque background was blocking the 3D animation entirely.
+      // A gradient on the sticky inner container provides legibility without hiding
+      // the canvas.
+      className="relative z-40 h-[250vh] w-full bg-transparent"
+    >
+      <div className="sticky top-0 h-screen w-full overflow-hidden flex flex-col justify-between py-12 px-6 md:px-12 lg:px-24 pointer-events-none">
+        {/*
+          ── Dark gradient overlay for text legibility ─────────────────────────
+          We need enough contrast for the UI text but the canvas must remain
+          visible. A radial vignette centred behind the text achieves this without
+          covering the chip in the middle of the viewport.
+        */}
         <div
-          ref={uiContainerRef}
-          className="w-full max-w-xl mx-auto flex flex-col items-center gap-6 px-6 opacity-0 pb-6 pointer-events-auto"
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse 120% 60% at 50% 0%, rgba(10,10,10,0.75) 0%, transparent 70%), " +
+              "radial-gradient(ellipse 120% 60% at 50% 100%, rgba(10,10,10,0.75) 0%, transparent 70%)",
+            zIndex: 0,
+          }}
+          aria-hidden="true"
+        />
+
+        {/* TOP UI: Title & Selectors */}
+        <div
+          ref={topUIRef}
+          className="relative flex flex-col items-center z-10 pt-8 opacity-0 pointer-events-auto"
         >
-          <div className="flex p-1 bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-full shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] relative w-full justify-between">
+          <h3 className="text-white/80 text-sm md:text-base font-bold tracking-[0.2em] uppercase mb-2">
+            Choose Your Own
+          </h3>
+          <h2 className="text-5xl md:text-8xl lg:text-9xl font-black tracking-tighter text-[#f4eedc] uppercase mb-8 text-center">
+            NTAG
+          </h2>
+
+          {/* Pill Buttons */}
+          <div className="flex flex-wrap justify-center gap-2 md:gap-4">
             {(["Standard", "Pro", "Elite"] as VariantKey[]).map((variant) => (
               <button
                 key={variant}
-                id={`variant-btn-${variant.toLowerCase()}`}
                 onClick={() => setActiveVariant(variant)}
-                className={`flex-1 py-3 px-6 text-xs md:text-sm font-medium rounded-full transition-all duration-300 relative z-10 ${
+                className={`py-2 px-6 rounded-full text-xs md:text-sm font-bold tracking-widest uppercase transition-all duration-300 border ${
                   activeVariant === variant
-                    ? "text-black bg-white shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-                    : "text-white/50 hover:text-white/80"
+                    ? "bg-[#2a130e] border-[#ff4a1c] text-[#ff4a1c]"
+                    : "bg-transparent border-white/20 text-white/60 hover:border-white/50 hover:text-white"
                 }`}
               >
-                {variant}
+                {variant === "Standard"
+                  ? "NTAG"
+                  : `NTAG ${variant.toUpperCase()}`}
               </button>
             ))}
           </div>
+        </div>
 
-          <div className="min-h-[140px] w-full text-center flex flex-col items-center justify-start transition-all duration-500">
-            <p className="text-3xl font-extralight text-white mb-2 tracking-tight">
-              {VARIANT_DETAILS[activeVariant].price}
-            </p>
-            <p className="text-white/60 text-xs md:text-sm max-w-sm font-light mb-5 leading-relaxed">
+        {/* BOTTOM UI: Split Description & Features */}
+        <div
+          ref={bottomUIRef}
+          className="relative w-full flex flex-col md:flex-row justify-between items-start md:items-end z-10 pb-8 opacity-0 pointer-events-auto gap-8 md:gap-12"
+        >
+          {/* Left Side: Description */}
+          <div className="w-full md:w-1/3 text-left">
+            <h4 className="text-white font-bold text-xl md:text-2xl mb-4 tracking-tight">
+              {VARIANT_DETAILS[activeVariant].title}
+            </h4>
+            <p className="text-white/60 font-medium text-sm leading-relaxed max-w-sm">
               {VARIANT_DETAILS[activeVariant].description}
             </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {VARIANT_DETAILS[activeVariant].features.map((feature, idx) => (
-                <span
-                  key={`feature-${idx}`}
-                  className="text-[9px] tracking-widest uppercase bg-white/[0.05] border border-white/[0.08] px-3 py-1 rounded-full text-white/40 font-light"
-                >
-                  {feature}
-                </span>
-              ))}
-            </div>
           </div>
 
-          <button
-            id="preorder-cta-btn"
-            className="w-full py-4 bg-white hover:bg-neutral-200 text-black font-semibold text-xs md:text-sm rounded-full tracking-widest uppercase transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] transform hover:scale-[1.01]"
-          >
-            Pre-Order Now
-          </button>
+          {/* Right Side: Features List */}
+          <div className="w-full md:w-1/3 flex flex-col gap-3">
+            {VARIANT_DETAILS[activeVariant].features.map((feature, idx) => (
+              <div key={idx} className="flex items-center gap-4">
+                <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center text-white/40 text-xs shrink-0">
+                  +
+                </div>
+                <span className="text-white/80 font-medium text-sm tracking-wide">
+                  {feature}
+                </span>
+              </div>
+            ))}
+
+            {/* CTA Button */}
+            <button className="mt-6 py-4 px-8 w-full md:w-auto bg-[#f4eedc] text-black font-bold uppercase tracking-widest text-xs hover:bg-white transition-colors duration-300">
+              Pre-Order Now
+            </button>
+          </div>
         </div>
       </div>
     </section>

@@ -17,21 +17,21 @@ const FALL_STATEMENTS = [
     line1: "Zero",
     line2: "Friction.",
     sub: "One tap. Infinite possibilities.",
-    position: "top-1/3 left-[8vw]",
+    position: "top-1/3 left-6 md:left-[8vw]",
     align: "text-left",
   },
   {
     line1: "Endless",
     line2: "Capability.",
     sub: "Every venue. Every interaction. Elevated.",
-    position: "top-1/2 right-[8vw] -translate-y-1/2",
+    position: "top-1/2 right-6 md:right-[8vw] -translate-y-1/2",
     align: "text-right",
   },
   {
     line1: "The New",
     line2: "Standard.",
     sub: "Physical craft. Digital soul.",
-    position: "bottom-1/4 left-[12vw]",
+    position: "bottom-1/4 left-6 md:left-[12vw]",
     align: "text-left",
   },
 ];
@@ -46,141 +46,218 @@ export default function OryzoFallSection({
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
-    if (!wrapper) return;
+    
+    // STRICT GUARD: Do not run any GSAP code until the DOM, Spline, and the Chip exist.
+    if (!wrapper || !splineApp || !chipRef) {
+      console.log("⏳ Waiting for Spline to mount before building ScrollTrigger...");
+      return; 
+    }
+
+    console.log("✅ Spline loaded! Building GSAP Timeline...");
 
     const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: wrapper,
-          start: "top top",
-          end: "bottom bottom",
-          scrub: 1.5,
-        },
+      // ── Shared ScrollTrigger config ────────────────────────────────────────
+      const ST_CONFIG = {
+        trigger: wrapper,
+        start: "top top",
+        end: "bottom bottom",
+      };
+
+      // ── TEXT timeline ──────────────────────────────────────────────────────
+      // Each statement gets ~20% of the scroll to fade in, ~25% to hold, ~10% to fade out.
+      // Overlapping slightly so text never feels rushed.
+      const textTl = gsap.timeline({
+        scrollTrigger: { ...ST_CONFIG, scrub: 2 },
       });
 
-      // ── Text statements: each fades in, holds, fades out ──────────────────
-      const textTimings = [
-        { start: 0, fadeIn: 0.12, hold: 0.18, fadeOut: 0.12 },
-        { start: 0.3, fadeIn: 0.12, hold: 0.15, fadeOut: 0.12 },
-        { start: 0.58, fadeIn: 0.12, hold: 0.12, fadeOut: 0.1 },
+      // Statement timing: [enterAt, exitAt] as 0–1 fractions of total scroll
+      const TEXT_WINDOWS = [
+        { in: 0.0, out: 0.28 }, // Zero Friction — lingers well into the spin
+        { in: 0.26, out: 0.54 }, // Endless Capability — overlaps briefly for continuity
+        { in: 0.52, out: 0.82 }, // The New Standard — holds through the settle
       ];
 
-      textTimings.forEach(({ start, fadeIn, hold, fadeOut }, i) => {
+      TEXT_WINDOWS.forEach(({ in: inAt, out: outAt }, i) => {
         const el = textRefs.current[i];
         if (!el) return;
         const line1 = el.querySelector(".fall-line1") as HTMLElement;
         const line2 = el.querySelector(".fall-line2") as HTMLElement;
         const sub = el.querySelector(".fall-sub") as HTMLElement;
 
-        tl.fromTo(
-          line1,
-          { y: 40, opacity: 0 },
-          { y: 0, opacity: 1, duration: fadeIn * 0.5, ease: "power3.out" },
-          start,
-        )
+        const fadeInDur = 0.07;
+        const fadeOutDur = 0.07;
+        const holdDur = outAt - inAt - fadeInDur - fadeOutDur;
+
+        textTl
+          // Stagger lines in smoothly
+          .fromTo(
+            line1,
+            { y: 36, opacity: 0 },
+            {
+              y: 0,
+              opacity: 1,
+              duration: fadeInDur * 0.55,
+              ease: "power3.out",
+            },
+            inAt,
+          )
           .fromTo(
             line2,
-            { y: 45, opacity: 0 },
-            { y: 0, opacity: 1, duration: fadeIn * 0.5, ease: "power3.out" },
-            start + fadeIn * 0.25,
+            { y: 44, opacity: 0 },
+            {
+              y: 0,
+              opacity: 1,
+              duration: fadeInDur * 0.55,
+              ease: "power3.out",
+            },
+            inAt + fadeInDur * 0.28,
           )
           .fromTo(
             sub,
-            { y: 15, opacity: 0 },
-            { y: 0, opacity: 0.4, duration: fadeIn * 0.4, ease: "power2.out" },
-            start + fadeIn * 0.5,
+            { y: 12, opacity: 0 },
+            {
+              y: 0,
+              opacity: 0.45,
+              duration: fadeInDur * 0.4,
+              ease: "power2.out",
+            },
+            inAt + fadeInDur * 0.55,
           )
-          .to(el, { opacity: 1, duration: hold, ease: "none" }, start + fadeIn)
+          // Hold at full opacity (wrapper is already opacity:1 from line animations)
           .to(
             el,
-            {
-              opacity: 0,
-              y: -30,
-              duration: fadeOut,
-              ease: "power2.in",
-            },
-            start + fadeIn + hold,
+            { opacity: 1, duration: holdDur, ease: "none" },
+            inAt + fadeInDur,
+          )
+          // Graceful exit: drift up and fade
+          .to(
+            el,
+            { opacity: 0, y: -24, duration: fadeOutDur, ease: "power2.inOut" },
+            inAt + fadeInDur + holdDur,
           );
       });
 
-      // ── 3D Chip: Centered fall with side pointing downwards ────────────────
+      // ── 3D CHIP timeline ───────────────────────────────────────────────────
       if (chipRef && splineApp) {
-        const startY = chipRef.position.y;
-        const startZ = chipRef.position.z;
-        const startRotY = chipRef.rotation.y;
-        const startScaleX = chipRef.scale.x;
-        const startScaleY = chipRef.scale.y;
-        const startScaleZ = chipRef.scale.z;
+        const s0x = chipRef.scale.x;
+        const s0y = chipRef.scale.y;
+        const s0z = chipRef.scale.z;
+        const p0y = chipRef.position.y;
+        const p0z = chipRef.position.z;
+        const r0x = chipRef.rotation.x;
+        const r0y = chipRef.rotation.y;
+        const r0z = chipRef.rotation.z;
 
-        // Phase 1 (0%–50%): Tilt 90 degrees (side pointing down) and start falling
-        tl.to(
+        // ── Philosophy ────────────────────────────────────────────────────────
+        // Single keyframe array per property = ONE tween = zero seam artifacts.
+        // All easing is handled via the `ease` on each keyframe segment — GSAP
+        // interpolates between keyframes with that ease, so the curve is smooth.
+        //
+        // ROTATION strategy (no counter-rotation):
+        //   x: starts side-on (−π/2), pivots through 0 (face reveal), then slightly past
+        //   y: monotonically increasing — continuous spin
+        //   z: starts 0, arcs to a small positive lean, returns to 0 — one soft wave
+        //
+        // SCALE strategy:
+        //   Climbs steadily to 1.0×, then at the edge-on moment (x≈0, face visible)
+        //   it POPS to 2× with a snap ease, then gracefully falls back to 1.1×.
+        //   This is the WOW moment — synchronized with the face reveal.
+        //
+        // POSITION: purely downward Y, shaped easing for cinematic weight.
+
+        const chipTl = gsap.timeline({
+          scrollTrigger: {
+            ...ST_CONFIG,
+            scrub: 3, // Higher scrub = more lag = silkier motion
+            onUpdate: () => splineApp.requestRender(),
+          },
+        });
+
+        // ── ROTATION — PRODUCT SHOWCASE CHOREOGRAPHY ─────────────────────────
+        // The chip does a cinematic "hero showcase" — presenting every angle
+        // up close to the user like a luxury product video:
+        //
+        //   0-15%   : FRONT FACE — flat toward user, dramatic entrance
+        //   15-30%  : tilt to show SIDE / EDGE profile
+        //   30-45%  : rotate to show BACK of the chip
+        //   45-60%  : continue past back to show OTHER SIDE
+        //   60-75%  : swing around to FRONT again — the money shot
+        //   75-100% : settle into final resting angle
+        //
+        // x controls tilt (nodding), y controls the main spin, z controls lean
+        // ── ROTATION ──────────────────────────────────────────────────────────
+        // Unified sine.inOut easing across all keyframes keeps velocity
+        // perfectly continuous — no hard acceleration edges between stops.
+        // Fewer keyframes = fewer seam points = smoother overall curve.
+        chipTl.to(
           chipRef.rotation,
           {
-            x: Math.PI / 2, // 90 degree tilt so the side faces straight down
-            y: startRotY + Math.PI * 0.5, // Slow, steady horizontal spin
-            z: 0,
-            duration: 0.5,
-            ease: "power2.inOut",
+            keyframes: [
+              // 0% — starting pose (captured from previous section)
+              { x: r0x,              y: r0y,                    z: r0z,         ease: "sine.inOut" },
+              // 25% — side/edge view, gentle tilt
+              { x: -Math.PI * 0.1,  y: r0y + Math.PI * 0.5,   z: r0z + 0.05,  ease: "sine.inOut" },
+              // 50% — full 180° back view, nearly flat
+              { x: -Math.PI * 0.04, y: r0y + Math.PI * 1.0,   z: r0z - 0.04,  ease: "sine.inOut" },
+              // 75% — back to front face — the money shot
+              { x: 0,               y: r0y + Math.PI * 2.0,   z: r0z,         ease: "sine.inOut" },
+              // 100% — premium resting angle, slight tilt
+              { x: Math.PI * 0.03,  y: r0y + Math.PI * 2.5,   z: r0z,         ease: "sine.inOut" },
+            ],
+            duration: 1,
             immediateRender: false,
           },
           0,
         );
 
-        tl.to(
+        // ── POSITION ──────────────────────────────────────────────────────────
+        // Clean single-arc path: chip drifts down-Y while Z rises to a peak
+        // at mid-scroll then gently retreats. No backtracking, no z-spikes.
+        // sine.inOut keeps velocity continuous through every keyframe.
+        chipTl.to(
           chipRef.position,
           {
-            x: 0, // Enforce dead center
-            y: startY - 40, // Smooth vertical fall
-            z: startZ, // Maintain depth
-            duration: 0.5,
-            ease: "power2.inOut",
+            keyframes: [
+              { x: 0, y: p0y,       z: p0z,       ease: "sine.inOut" }, // 0%   — start
+              { x: 0, y: p0y - 12,  z: p0z + 35,  ease: "sine.inOut" }, // 33%  — zoom in
+              { x: 0, y: p0y - 22,  z: p0z + 40,  ease: "sine.inOut" }, // 66%  — peak depth
+              { x: 0, y: p0y - 30,  z: p0z + 28,  ease: "sine.inOut" }, // 100% — settle back
+            ],
+            duration: 1,
             immediateRender: false,
           },
           0,
         );
 
-        // Phase 2 (50%–80%): Continue the vertical fall down the center line
-        tl.to(
-          chipRef.rotation,
-          {
-            x: Math.PI / 2, // Lock the side-down orientation
-            y: startRotY + Math.PI * 1.5, // Continue slow spin
-            z: 0,
-            duration: 0.3,
-            ease: "none",
-            immediateRender: false,
-          },
-          0.5,
-        );
+        // ── SCALE ─────────────────────────────────────────────────────────────
+        // Scale up smoothly at the start, hold, then gently breathe once at
+        // the front-face reveal. No snappy power4 pops — everything is sine.
+        const isMobile = window.innerWidth < 768;
+        const targetScale = isMobile ? 1.4 : 2.0;
 
-        tl.to(
-          chipRef.position,
-          {
-            x: 0,
-            y: startY - 100, // Deeper fall
-            z: startZ,
-            duration: 0.3,
-            ease: "none",
-            immediateRender: false,
-          },
-          0.5,
-        );
-
-        // Phase 3 (80%–100%): Subtle scale up for editorial gallery
-        tl.to(
+        chipTl.to(
           chipRef.scale,
           {
-            x: startScaleX * 1.15,
-            y: startScaleY * 1.15,
-            z: startScaleZ * 1.15,
-            duration: 0.2,
-            ease: "power2.out",
+            keyframes: [
+              // 0%   — original size (hand-off from hero section)
+              { x: s0x,                     y: s0y,                     z: s0z,                     ease: "sine.inOut" },
+              // 25%  — scale up smoothly to showcase size
+              { x: s0x * targetScale,        y: s0y * targetScale,        z: s0z * targetScale,        ease: "sine.inOut" },
+              // 66%  — gentle breath in at the front-face money shot
+              { x: s0x * (targetScale * 1.06), y: s0y * (targetScale * 1.06), z: s0z * (targetScale * 1.06), ease: "sine.inOut" },
+              // 100% — settle back to target size (inherited by next section)
+              { x: s0x * targetScale,        y: s0y * targetScale,        z: s0z * targetScale,        ease: "sine.inOut" },
+            ],
+            duration: 1,
             immediateRender: false,
           },
-          0.8,
+          0,
         );
       }
     });
+
+    // Refresh ScrollTrigger once the timeline is built to ensure measurements are perfect
+    ScrollTrigger.refresh();
 
     return () => ctx.revert();
   }, [splineApp, chipRef]);
@@ -189,7 +266,7 @@ export default function OryzoFallSection({
     <section
       ref={wrapperRef}
       id="oryzo-fall"
-      className="relative z-40 h-[300vh] w-full"
+      className="relative z-40 h-[700vh] w-full"
     >
       <div
         ref={stickyRef}
@@ -209,32 +286,34 @@ export default function OryzoFallSection({
             className={`absolute ${item.position} ${item.align} select-none opacity-0`}
             style={{ maxWidth: "clamp(280px, 40vw, 560px)" }}
           >
-            <p
-              className="fall-line1 block text-[clamp(3rem,7vw,9rem)] font-black tracking-tighter text-white leading-[0.9] uppercase"
+            <div
+              className={`fall-line1 block text-[clamp(2.5rem,7vw,9rem)] font-black tracking-tighter text-white leading-[0.9] uppercase`}
               style={{
                 fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
+                letterSpacing: "-0.03em",
               }}
             >
               {item.line1}
-            </p>
-            <p
-              className="fall-line2 block text-[clamp(3rem,7vw,9rem)] font-black tracking-tighter leading-[0.9] uppercase"
+            </div>
+            <div
+              className={`fall-line2 block text-[clamp(2.5rem,7vw,9rem)] font-black tracking-tighter leading-[0.9] uppercase`}
               style={{
                 fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
-                WebkitTextStroke: "1px rgba(255,255,255,0.3)",
+                letterSpacing: "-0.03em",
                 color: "transparent",
+                WebkitTextStroke: "1px rgba(255,255,255,0.8)",
               }}
             >
               {item.line2}
-            </p>
-            <p
-              className="fall-sub mt-4 text-[10px] tracking-[0.4em] uppercase text-white font-light opacity-0"
+            </div>
+            <div
+              className="fall-sub mt-4 text-[9px] md:text-[10px] tracking-[0.3em] md:tracking-[0.4em] uppercase text-white font-light opacity-0"
               style={{
                 fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
               }}
             >
               {item.sub}
-            </p>
+            </div>
           </div>
         ))}
 

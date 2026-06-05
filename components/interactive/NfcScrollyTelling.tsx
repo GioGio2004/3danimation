@@ -76,13 +76,13 @@ export default function NfcScrollyTelling({
       } else {
         console.warn(
           "[NfcScrollyTelling] NFC_Coaster not found. Available objects:",
-          app.getAllObjects().map((o) => o.name)
+          app.getAllObjects().map((o) => o.name),
         );
       }
 
       setSplineLoaded(true);
     },
-    [onChipReady]
+    [onChipReady],
   );
 
   // Cleanup WebGL context on unmount
@@ -131,7 +131,7 @@ export default function NfcScrollyTelling({
           duration: 0.5,
           ease: "power2.in",
         },
-        0 // Start at the very beginning of the scroll
+        0, // Start at the very beginning of the scroll
       );
 
       // ── Act 1 (0% → 100%): Chip scales down to product size + rotates ──
@@ -147,7 +147,7 @@ export default function NfcScrollyTelling({
             duration: 1,
             ease: "power2.inOut",
           },
-          0 // Synchronized: starts at the same scroll position as the text
+          0, // Synchronized: starts at the same scroll position as the text
         );
 
         heroTl.to(
@@ -158,7 +158,7 @@ export default function NfcScrollyTelling({
             duration: 1,
             ease: "power1.inOut",
           },
-          0 // Also synchronized from scroll start
+          0, // Also synchronized from scroll start
         );
       }
     });
@@ -199,7 +199,7 @@ export default function NfcScrollyTelling({
           id="hero-shemoqmedi-text"
           style={{
             fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
-            fontSize: "clamp(4rem, 14vw, 18rem)",
+            fontSize: "clamp(2.5rem, 14vw, 18rem)",
             fontWeight: 900,
             letterSpacing: "-0.02em",
             color: "#ffffff",
